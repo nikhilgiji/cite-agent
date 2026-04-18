@@ -9,8 +9,8 @@ from citation_agent.ingest.bib_loader import load_bib_entries
 from citation_agent.ingest.metadata_lookup import enrich_pdf_metadata
 from citation_agent.ingest.pdf_loader import load_pdfs
 from citation_agent.ingest.tex_project import analyze_project
-from citation_agent.models.schemas import AuditEntry, BibEntry, PipelineArtifacts
-from citation_agent.parse.tex_extract import extract_claims
+from citation_agent.models.schemas import AuditEntry, BibEntry, ExistingCitationResult, PipelineArtifacts
+from citation_agent.parse.tex_extract import extract_claims, extract_existing_citation_checks
 from citation_agent.report.markdown_report import render_markdown_report
 from citation_agent.retrieve.hybrid import retrieve_candidates
 from citation_agent.validate.sanity_checks import run_sanity_checks
@@ -26,11 +26,14 @@ def run_pipeline(
     analysis = analyze_project(project_root)
     bib_paths = explicit_bib_paths or analysis.bibliography_files
     bib_entries = load_bib_entries(bib_paths)
+    bib_entry_map = {entry.key: entry for entry in bib_entries}
     pdf_documents = [enrich_pdf_metadata(document) for document in load_pdfs(pdf_dir)]
 
     claims = []
+    existing_checks = []
     for tex_file in analysis.tex_files:
         claims.extend(extract_claims(Path(tex_file), Path(project_root)))
+        existing_checks.extend(extract_existing_citation_checks(Path(tex_file)))
 
     decisions = []
     audit_entries = []
@@ -88,6 +91,7 @@ def run_pipeline(
                 added_bib_entries.append(entry)
 
     validation_messages = run_sanity_checks(decisions, bib_entries)
+    existing_citation_results = verify_existing_citations(existing_checks, bib_entry_map, config)
 
     artifacts = PipelineArtifacts(
         analysis=analysis,
@@ -96,6 +100,7 @@ def run_pipeline(
         pdf_documents=pdf_documents,
         decisions=decisions,
         audit_entries=audit_entries,
+        existing_citation_results=existing_citation_results,
         markdown_report="",
         added_bib_entries=added_bib_entries,
         validation_messages=validation_messages,
@@ -115,5 +120,96 @@ def summarize_scan(artifacts: PipelineArtifacts) -> dict[str, int | bool]:
         "claims": len(artifacts.claims),
         "inserted": decision_counts.get("inserted", 0),
         "needs_review": decision_counts.get("needs_review", 0),
+        "existing_citation_checks": len(artifacts.existing_citation_results),
         "ieee_like": artifacts.analysis.ieee_like,
     }
+
+
+def verify_existing_citations(existing_checks, bib_entry_map, config: CitationAgentConfig) -> list[ExistingCitationResult]:
+    results: list[ExistingCitationResult] = []
+    for check in existing_checks:
+        missing_keys = [key for key in check.cited_keys if key not in bib_entry_map]
+        if missing_keys:
+            results.append(
+                ExistingCitationResult(
+                    check_id=check.check_id,
+                    file_path=check.location.file_path,
+                    line_number=check.location.line_number,
+                    sentence_text=check.sentence_text,
+                    citation_command=check.citation_command,
+                    cited_keys=check.cited_keys,
+                    status="missing_key",
+                    confidence=0.0,
+                    reason="One or more cited BibTeX keys were not found in the loaded bibliography.",
+                    missing_keys=missing_keys,
+                )
+            )
+            continue
+
+        verified_candidates = []
+        for key in check.cited_keys:
+            entry = bib_entry_map[key]
+            title = entry.title or key
+            evidence_spans = [span for span in [entry.title, entry.author, entry.fields.get("abstract", "")] if span]
+            lexical_candidate = retrieve_candidates(
+                claim=type("ClaimProxy", (), {"text": check.cleaned_claim_text})(),
+                bib_entries=[entry],
+                pdf_documents=[],
+                config=config.retrieval,
+            )
+            if not lexical_candidate:
+                continue
+            verified_candidates.append(
+                verify_candidate(
+                    type("ClaimProxy", (), {"text": check.cleaned_claim_text})(),
+                    lexical_candidate[0],
+                    config.verification,
+                )
+            )
+
+        if not verified_candidates:
+            results.append(
+                ExistingCitationResult(
+                    check_id=check.check_id,
+                    file_path=check.location.file_path,
+                    line_number=check.location.line_number,
+                    sentence_text=check.sentence_text,
+                    citation_command=check.citation_command,
+                    cited_keys=check.cited_keys,
+                    status="unsupported",
+                    confidence=0.0,
+                    reason="Could not derive supporting evidence from the cited bibliography entries.",
+                )
+            )
+            continue
+
+        verified_candidates.sort(key=lambda item: item.confidence, reverse=True)
+        best = verified_candidates[0]
+        if best.support_label == "direct_support":
+            status = "supported"
+            reason = "The cited source plausibly supports the local sentence."
+        elif best.support_label == "partial_support" and best.confidence >= config.verification.auto_insert_threshold:
+            status = "supported"
+            reason = "The cited source appears consistent with the local sentence under the current confidence threshold."
+        elif best.support_label == "partial_support":
+            status = "weak_support"
+            reason = "The cited source is related, but support looks partial and should be reviewed."
+        else:
+            status = "unsupported"
+            reason = "The cited source does not appear to support the local sentence strongly enough."
+
+        results.append(
+            ExistingCitationResult(
+                check_id=check.check_id,
+                file_path=check.location.file_path,
+                line_number=check.location.line_number,
+                sentence_text=check.sentence_text,
+                citation_command=check.citation_command,
+                cited_keys=check.cited_keys,
+                status=status,
+                confidence=best.confidence,
+                reason=reason,
+                evidence_spans=best.evidence_spans,
+            )
+        )
+    return results

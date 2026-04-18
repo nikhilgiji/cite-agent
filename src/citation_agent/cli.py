@@ -12,6 +12,7 @@ from citation_agent.edit.diff_writer import unified_diff
 from citation_agent.edit.tex_rewriter import apply_citation_decisions
 from citation_agent.pipeline import run_pipeline, summarize_scan
 from citation_agent.report.audit_json import write_audit_json
+from citation_agent.report.text_report import write_existing_citation_text_report
 
 
 LOGGER = logging.getLogger("citation_agent")
@@ -27,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--log-level", default="INFO")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    for name in ("scan", "audit", "apply"):
+    for name in ("scan", "audit", "apply", "verify-existing"):
         subparser = subparsers.add_parser(name)
         subparser.add_argument("--project", required=True)
         subparser.add_argument("--pdfs", default=None)
@@ -44,6 +45,9 @@ def build_parser() -> argparse.ArgumentParser:
     repair_parser = subparsers.add_parser("repair-bib")
     repair_parser.add_argument("--bib", action="append", required=True)
     repair_parser.add_argument("--pdfs", required=True)
+
+    verify_parser = subparsers.choices["verify-existing"]
+    verify_parser.add_argument("--out", required=True, help="Path to a plain text verification report")
 
     return parser
 
@@ -106,6 +110,13 @@ def _run_repair_bib(args: argparse.Namespace, config: CitationAgentConfig) -> in
     return 0
 
 
+def _run_verify_existing(args: argparse.Namespace, config: CitationAgentConfig) -> int:
+    artifacts = run_pipeline(args.project, args.pdfs, _parse_bib_args(args.bib), config)
+    write_existing_citation_text_report(args.out, artifacts.existing_citation_results)
+    print(f"Wrote existing citation verification report to {args.out}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -120,6 +131,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_apply(args, config)
     if args.command == "repair-bib":
         return _run_repair_bib(args, config)
+    if args.command == "verify-existing":
+        return _run_verify_existing(args, config)
     parser.error(f"Unsupported command: {args.command}")
     return 2
 

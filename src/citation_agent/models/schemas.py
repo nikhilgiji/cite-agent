@@ -8,6 +8,7 @@ from typing import Any
 @dataclass(slots=True)
 class SourceLocation:
     file_path: str
+    line_number: int
     section: str | None
     paragraph_index: int
     sentence_index: int
@@ -25,6 +26,16 @@ class ClaimCandidate:
     has_nearby_citation: bool
     multi_source_hint: bool
     vague: bool
+    location: SourceLocation
+
+
+@dataclass(slots=True)
+class ExistingCitationCheck:
+    check_id: str
+    citation_command: str
+    cited_keys: list[str]
+    sentence_text: str
+    cleaned_claim_text: str
     location: SourceLocation
 
 
@@ -109,6 +120,21 @@ class AuditEntry:
 
 
 @dataclass(slots=True)
+class ExistingCitationResult:
+    check_id: str
+    file_path: str
+    line_number: int
+    sentence_text: str
+    citation_command: str
+    cited_keys: list[str]
+    status: str
+    confidence: float
+    reason: str
+    evidence_spans: list[str] = field(default_factory=list)
+    missing_keys: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class ProjectAnalysis:
     project_root: str
     tex_files: list[str]
@@ -128,6 +154,7 @@ class PipelineArtifacts:
     pdf_documents: list[PDFDocument]
     decisions: list[CitationDecision]
     audit_entries: list[AuditEntry]
+    existing_citation_results: list[ExistingCitationResult]
     markdown_report: str
     applied_files: dict[str, str] = field(default_factory=dict)
     added_bib_entries: list[BibEntry] = field(default_factory=list)

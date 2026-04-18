@@ -176,15 +176,38 @@ citation-agent repair-bib \
   --pdfs /path/to/pdfs
 ```
 
+### 6. Verify citations that already exist
+
+Use `verify-existing` to inspect citation commands already present in the TeX source and write a plain text report showing whether the cited BibTeX entries look supported, weak, unsupported, or missing.
+
+```bash
+citation-agent verify-existing \
+  --project /path/to/latex-project \
+  --pdfs /path/to/pdfs \
+  --bib /path/to/refs.bib \
+  --out existing-citation-report.txt
+```
+
+The report is intentionally easy to share and review in any editor. It includes:
+
+- the file and sentence containing the citation
+- the exact line number in the `.tex` file
+- the citation command and cited keys
+- a status such as `supported`, `weak_support`, `unsupported`, or `missing_key`
+- a confidence score
+- a short reason
+- evidence snippets when available
+
 ## Recommended Workflow
 
 The safest way to use Citation Agent is:
 
 1. Run `scan`
 2. Run `audit`
-3. Run `apply --dry-run`
-4. Review the proposed changes
-5. Run `apply --write` only after checking the diff
+3. Run `verify-existing` if you want to audit citations already in the document
+4. Run `apply --dry-run`
+5. Review the proposed changes
+6. Run `apply --write` only after checking the diff
 
 This matches the tool’s design philosophy: audit first, edit second.
 

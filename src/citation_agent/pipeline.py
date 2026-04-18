@@ -39,11 +39,22 @@ def run_pipeline(
     audit_entries = []
     existing_keys = {entry.key for entry in bib_entries}
     bib_target_path = bib_paths[0] if bib_paths else None
+    existing_citation_results = verify_existing_citations(existing_checks, bib_entry_map, config)
+    removable_statuses = {"missing_key", "unsupported"}
+    blocking_by_file_and_offset: dict[tuple[str, int], bool] = {}
+    for result in existing_citation_results:
+        key = (result.file_path, result.start_offset)
+        prior = blocking_by_file_and_offset.get(key, False)
+        blocking_by_file_and_offset[key] = prior or result.status not in removable_statuses
 
     for claim in claims:
         candidates = retrieve_candidates(claim, bib_entries, pdf_documents, config.retrieval)
         verified = [verify_candidate(claim, candidate, config.verification) for candidate in candidates]
         verified.sort(key=lambda item: item.confidence, reverse=True)
+        treat_existing_citation_as_blocking = blocking_by_file_and_offset.get(
+            (claim.location.file_path, claim.location.start_offset),
+            claim.has_nearby_citation,
+        )
         decision = decide_citation(
             claim=claim,
             verified_candidates=verified,
@@ -51,6 +62,7 @@ def run_pipeline(
             citation_commands=analysis.citation_commands,
             bib_target_path=bib_target_path,
             config=config,
+            treat_existing_citation_as_blocking=treat_existing_citation_as_blocking,
         )
         decisions.append(decision)
 
@@ -91,7 +103,6 @@ def run_pipeline(
                 added_bib_entries.append(entry)
 
     validation_messages = run_sanity_checks(decisions, bib_entries)
-    existing_citation_results = verify_existing_citations(existing_checks, bib_entry_map, config)
 
     artifacts = PipelineArtifacts(
         analysis=analysis,
@@ -135,6 +146,8 @@ def verify_existing_citations(existing_checks, bib_entry_map, config: CitationAg
                     check_id=check.check_id,
                     file_path=check.location.file_path,
                     line_number=check.location.line_number,
+                    start_offset=check.location.start_offset,
+                    end_offset=check.location.end_offset,
                     sentence_text=check.sentence_text,
                     citation_command=check.citation_command,
                     cited_keys=check.cited_keys,
@@ -173,6 +186,8 @@ def verify_existing_citations(existing_checks, bib_entry_map, config: CitationAg
                     check_id=check.check_id,
                     file_path=check.location.file_path,
                     line_number=check.location.line_number,
+                    start_offset=check.location.start_offset,
+                    end_offset=check.location.end_offset,
                     sentence_text=check.sentence_text,
                     citation_command=check.citation_command,
                     cited_keys=check.cited_keys,
@@ -203,6 +218,8 @@ def verify_existing_citations(existing_checks, bib_entry_map, config: CitationAg
                 check_id=check.check_id,
                 file_path=check.location.file_path,
                 line_number=check.location.line_number,
+                start_offset=check.location.start_offset,
+                end_offset=check.location.end_offset,
                 sentence_text=check.sentence_text,
                 citation_command=check.citation_command,
                 cited_keys=check.cited_keys,

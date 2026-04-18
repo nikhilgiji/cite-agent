@@ -77,8 +77,13 @@ def _run_apply(args: argparse.Namespace, config: CitationAgentConfig) -> int:
     for tex_file in artifacts.analysis.tex_files:
         path = Path(tex_file)
         before = path.read_text(encoding="utf-8", errors="ignore")
-        after, inserted = apply_citation_decisions(path, artifacts.claims, artifacts.decisions)
-        if inserted <= 0 or before == after:
+        after, inserted, removed = apply_citation_decisions(
+            path,
+            artifacts.claims,
+            artifacts.decisions,
+            artifacts.existing_citation_results,
+        )
+        if inserted <= 0 and removed <= 0 and before == after:
             continue
         changed_files[str(path)] = after
         if args.write:

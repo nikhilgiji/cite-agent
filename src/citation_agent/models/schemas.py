@@ -124,6 +124,8 @@ class ExistingCitationResult:
     check_id: str
     file_path: str
     line_number: int
+    start_offset: int
+    end_offset: int
     sentence_text: str
     citation_command: str
     cited_keys: list[str]

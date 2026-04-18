@@ -154,7 +154,12 @@ citation-agent apply \
 
 ### 4. Write edits to disk
 
-Use `apply --write` to apply safe citation insertions and append any approved new BibTeX entries.
+Use `apply --write` to run the citation repair flow against the content:
+
+- verify existing citations first
+- remove clearly wrong citations such as missing keys or unsupported citations
+- add missing supported citations where the evidence is strong enough
+- append any approved new BibTeX entries
 
 ```bash
 citation-agent apply \
@@ -205,8 +210,8 @@ The safest way to use Citation Agent is:
 1. Run `scan`
 2. Run `audit`
 3. Run `verify-existing` if you want to audit citations already in the document
-4. Run `apply --dry-run`
-5. Review the proposed changes
+4. Run `apply --dry-run` to preview repairs to the content
+5. Review which wrong citations would be removed and which missing citations would be added
 6. Run `apply --write` only after checking the diff
 
 This matches the tool’s design philosophy: audit first, edit second.
@@ -241,6 +246,11 @@ PYTHONPATH=src python3 -m citation_agent.cli apply \
   --bib ~/research/my-paper/refs.bib \
   --dry-run
 ```
+
+In repair mode, the dry-run may show both kinds of content edits in the same pass:
+
+- removal of clearly wrong citations already present in the sentence
+- insertion of a supported replacement citation or a newly missing citation
 
 ## Configuration
 

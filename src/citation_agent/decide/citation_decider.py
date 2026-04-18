@@ -50,6 +50,7 @@ def decide_citation(
     citation_commands: list[str],
     bib_target_path: str | None,
     config: CitationAgentConfig,
+    treat_existing_citation_as_blocking: bool = True,
 ) -> CitationDecision:
     if not claim.needs_citation:
         return CitationDecision(
@@ -59,7 +60,7 @@ def decide_citation(
             reason="Heuristics did not mark this sentence as requiring a citation.",
         )
 
-    if claim.has_nearby_citation and not config.editing.replacement_mode:
+    if claim.has_nearby_citation and treat_existing_citation_as_blocking and not config.editing.replacement_mode:
         return CitationDecision(
             claim_id=claim.claim_id,
             action="skipped",

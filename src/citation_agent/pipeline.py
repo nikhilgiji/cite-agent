@@ -6,10 +6,10 @@ from pathlib import Path
 from citation_agent.config import CitationAgentConfig
 from citation_agent.decide.citation_decider import decide_citation
 from citation_agent.ingest.bib_loader import load_bib_entries
-from citation_agent.ingest.metadata_lookup import enrich_pdf_metadata
+from citation_agent.ingest.metadata_lookup import enrich_pdf_metadata, search_public_metadata
 from citation_agent.ingest.pdf_loader import load_pdfs
 from citation_agent.ingest.tex_project import analyze_project
-from citation_agent.models.schemas import AuditEntry, BibEntry, ExistingCitationResult, PipelineArtifacts
+from citation_agent.models.schemas import AuditEntry, BibEntry, ExistingCitationResult, ExternalCitationSuggestion, PipelineArtifacts
 from citation_agent.parse.tex_extract import extract_claims, extract_existing_citation_checks
 from citation_agent.report.markdown_report import render_markdown_report
 from citation_agent.retrieve.hybrid import retrieve_candidates
@@ -103,6 +103,7 @@ def run_pipeline(
                 added_bib_entries.append(entry)
 
     validation_messages = run_sanity_checks(decisions, bib_entries)
+    external_suggestions = collect_external_suggestions(claims, decisions, config)
 
     artifacts = PipelineArtifacts(
         analysis=analysis,
@@ -112,6 +113,7 @@ def run_pipeline(
         decisions=decisions,
         audit_entries=audit_entries,
         existing_citation_results=existing_citation_results,
+        external_suggestions=external_suggestions,
         markdown_report="",
         added_bib_entries=added_bib_entries,
         validation_messages=validation_messages,
@@ -146,6 +148,7 @@ def verify_existing_citations(existing_checks, bib_entry_map, config: CitationAg
                     check_id=check.check_id,
                     file_path=check.location.file_path,
                     line_number=check.location.line_number,
+                    paragraph_index=check.location.paragraph_index,
                     start_offset=check.location.start_offset,
                     end_offset=check.location.end_offset,
                     sentence_text=check.sentence_text,
@@ -186,6 +189,7 @@ def verify_existing_citations(existing_checks, bib_entry_map, config: CitationAg
                     check_id=check.check_id,
                     file_path=check.location.file_path,
                     line_number=check.location.line_number,
+                    paragraph_index=check.location.paragraph_index,
                     start_offset=check.location.start_offset,
                     end_offset=check.location.end_offset,
                     sentence_text=check.sentence_text,
@@ -218,6 +222,7 @@ def verify_existing_citations(existing_checks, bib_entry_map, config: CitationAg
                 check_id=check.check_id,
                 file_path=check.location.file_path,
                 line_number=check.location.line_number,
+                paragraph_index=check.location.paragraph_index,
                 start_offset=check.location.start_offset,
                 end_offset=check.location.end_offset,
                 sentence_text=check.sentence_text,
@@ -230,3 +235,39 @@ def verify_existing_citations(existing_checks, bib_entry_map, config: CitationAg
             )
         )
     return results
+
+
+def collect_external_suggestions(
+    claims,
+    decisions,
+    config: CitationAgentConfig,
+) -> list[ExternalCitationSuggestion]:
+    if not config.metadata_lookup.enabled:
+        return []
+
+    decision_by_claim = {decision.claim_id: decision for decision in decisions}
+    candidate_claims = []
+    for claim in claims:
+        decision = decision_by_claim.get(claim.claim_id)
+        if not decision or not claim.needs_citation:
+            continue
+        if decision.action == "needs_review":
+            candidate_claims.append(claim)
+
+    suggestions: list[ExternalCitationSuggestion] = []
+    seen_titles: set[tuple[str, str]] = set()
+    for claim in candidate_claims[: config.metadata_lookup.max_claims]:
+        for suggestion in search_public_metadata(
+            claim_id=claim.claim_id,
+            file_path=claim.location.file_path,
+            line_number=claim.location.line_number,
+            paragraph_index=claim.location.paragraph_index,
+            sentence_text=claim.text,
+            config=config.metadata_lookup,
+        ):
+            dedupe_key = (claim.claim_id, suggestion.title.lower())
+            if dedupe_key in seen_titles:
+                continue
+            seen_titles.add(dedupe_key)
+            suggestions.append(suggestion)
+    return suggestions

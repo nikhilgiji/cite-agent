@@ -124,6 +124,7 @@ class ExistingCitationResult:
     check_id: str
     file_path: str
     line_number: int
+    paragraph_index: int
     start_offset: int
     end_offset: int
     sentence_text: str
@@ -134,6 +135,24 @@ class ExistingCitationResult:
     reason: str
     evidence_spans: list[str] = field(default_factory=list)
     missing_keys: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ExternalCitationSuggestion:
+    suggestion_id: str
+    claim_id: str
+    file_path: str
+    line_number: int
+    paragraph_index: int
+    sentence_text: str
+    title: str
+    authors: list[str] = field(default_factory=list)
+    year: str | None = None
+    doi: str | None = None
+    url: str | None = None
+    confidence: float = 0.0
+    reason: str = ""
+    source: str = "public_metadata"
 
 
 @dataclass(slots=True)
@@ -157,6 +176,7 @@ class PipelineArtifacts:
     decisions: list[CitationDecision]
     audit_entries: list[AuditEntry]
     existing_citation_results: list[ExistingCitationResult]
+    external_suggestions: list[ExternalCitationSuggestion]
     markdown_report: str
     applied_files: dict[str, str] = field(default_factory=dict)
     added_bib_entries: list[BibEntry] = field(default_factory=list)

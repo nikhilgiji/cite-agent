@@ -28,10 +28,20 @@ class EditingConfig:
 
 
 @dataclass(slots=True)
+class MetadataLookupConfig:
+    enabled: bool = False
+    provider: str = "crossref"
+    timeout_seconds: float = 4.0
+    max_results_per_claim: int = 3
+    max_claims: int = 20
+
+
+@dataclass(slots=True)
 class CitationAgentConfig:
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
     verification: VerificationConfig = field(default_factory=VerificationConfig)
     editing: EditingConfig = field(default_factory=EditingConfig)
+    metadata_lookup: MetadataLookupConfig = field(default_factory=MetadataLookupConfig)
 
     @classmethod
     def load(cls, path: str | Path | None) -> "CitationAgentConfig":
@@ -53,6 +63,7 @@ class CitationAgentConfig:
             retrieval=RetrievalConfig(**data.get("retrieval", {})),
             verification=VerificationConfig(**data.get("verification", {})),
             editing=EditingConfig(**data.get("editing", {})),
+            metadata_lookup=MetadataLookupConfig(**data.get("metadata_lookup", {})),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -60,4 +71,5 @@ class CitationAgentConfig:
             "retrieval": self.retrieval.__dict__,
             "verification": self.verification.__dict__,
             "editing": self.editing.__dict__,
+            "metadata_lookup": self.metadata_lookup.__dict__,
         }

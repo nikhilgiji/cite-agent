@@ -12,7 +12,7 @@ from citation_agent.edit.diff_writer import unified_diff
 from citation_agent.edit.tex_rewriter import apply_citation_decisions
 from citation_agent.pipeline import run_pipeline, summarize_scan
 from citation_agent.report.audit_json import write_audit_json
-from citation_agent.report.text_report import write_existing_citation_text_report
+from citation_agent.report.text_report import write_existing_citation_text_report, write_review_text_report
 
 
 LOGGER = logging.getLogger("citation_agent")
@@ -26,9 +26,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="citation-agent")
     parser.add_argument("--config", help="Path to TOML or JSON config", default=None)
     parser.add_argument("--log-level", default="INFO")
+    parser.add_argument("--enable-public-lookup", action="store_true", help="Query Crossref for additional citation suggestions")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    for name in ("scan", "audit", "apply", "verify-existing"):
+    for name in ("scan", "audit", "apply", "verify-existing", "review"):
         subparser = subparsers.add_parser(name)
         subparser.add_argument("--project", required=True)
         subparser.add_argument("--pdfs", default=None)
@@ -37,10 +38,14 @@ def build_parser() -> argparse.ArgumentParser:
     audit_parser = subparsers.choices["audit"]
     audit_parser.add_argument("--out", required=True)
 
+    review_parser = subparsers.choices["review"]
+    review_parser.add_argument("--out", required=True, help="Path to a readable text review report")
+
     apply_parser = subparsers.choices["apply"]
     mode_group = apply_parser.add_mutually_exclusive_group(required=True)
     mode_group.add_argument("--dry-run", action="store_true")
     mode_group.add_argument("--write", action="store_true")
+    apply_parser.add_argument("--report-out", default=None, help="Optional path to a readable text apply report")
 
     repair_parser = subparsers.add_parser("repair-bib")
     repair_parser.add_argument("--bib", action="append", required=True)
@@ -66,6 +71,13 @@ def _run_audit(args: argparse.Namespace, config: CitationAgentConfig) -> int:
     artifacts = run_pipeline(args.project, args.pdfs, _parse_bib_args(args.bib), config)
     write_audit_json(args.out, artifacts)
     print(artifacts.markdown_report)
+    return 0
+
+
+def _run_review(args: argparse.Namespace, config: CitationAgentConfig) -> int:
+    artifacts = run_pipeline(args.project, args.pdfs, _parse_bib_args(args.bib), config)
+    write_review_text_report(args.out, artifacts, mode="review")
+    print(f"Wrote review report to {args.out}")
     return 0
 
 
@@ -100,6 +112,9 @@ def _run_apply(args: argparse.Namespace, config: CitationAgentConfig) -> int:
         else:
             print(f"# Would append {len(artifacts.added_bib_entries)} bibliography entr(y/ies) to {bib_path}")
 
+    if args.report_out:
+        write_review_text_report(args.report_out, artifacts, mode="apply")
+
     if args.write:
         print(artifacts.markdown_report)
     return 0
@@ -127,11 +142,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     _configure_logging(args.log_level)
     config = CitationAgentConfig.load(args.config)
+    if args.enable_public_lookup:
+        config.metadata_lookup.enabled = True
 
     if args.command == "scan":
         return _run_scan(args, config)
     if args.command == "audit":
         return _run_audit(args, config)
+    if args.command == "review":
+        return _run_review(args, config)
     if args.command == "apply":
         return _run_apply(args, config)
     if args.command == "repair-bib":

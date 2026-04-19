@@ -140,7 +140,36 @@ citation-agent audit \
 
 This also prints a Markdown summary to the terminal.
 
-### 3. Preview edits with dry-run
+### 3. Generate a readable text review report
+
+Use `review` when you want a human-readable plain text report that answers the core questions directly:
+
+- which existing citations look valid
+- which existing citations are weak but should be kept for review
+- which citations look invalid or incorrect
+- which claims are missing citations and can be added automatically
+- which claims still need manual review
+- which additional public citation suggestions may be relevant
+
+```bash
+citation-agent review \
+  --project /path/to/latex-project \
+  --pdfs /path/to/pdfs \
+  --bib /path/to/refs.bib \
+  --out citation-review-report.txt
+```
+
+The text report includes:
+
+- TeX file path
+- line number
+- paragraph number
+- sentence text
+- action or status
+- confidence
+- short explanation
+
+### 4. Preview edits with dry-run
 
 Use `apply --dry-run` to see the proposed diffs without modifying files.
 
@@ -152,7 +181,18 @@ citation-agent apply \
   --dry-run
 ```
 
-### 4. Write edits to disk
+You can also save a readable text summary of the planned changes:
+
+```bash
+citation-agent apply \
+  --project /path/to/latex-project \
+  --pdfs /path/to/pdfs \
+  --bib /path/to/refs.bib \
+  --dry-run \
+  --report-out citation-apply-report.txt
+```
+
+### 5. Write edits to disk
 
 Use `apply --write` to run the citation repair flow against the content:
 
@@ -171,7 +211,7 @@ citation-agent apply \
 
 When writing edits, the tool creates backup files using the configured backup suffix.
 
-### 5. Repair bibliography from local PDFs
+### 6. Repair bibliography from local PDFs
 
 Use `repair-bib` to append conservatively generated bibliography entries when strong enough metadata exists.
 
@@ -181,7 +221,7 @@ citation-agent repair-bib \
   --pdfs /path/to/pdfs
 ```
 
-### 6. Verify citations that already exist
+### 7. Verify citations that already exist
 
 Use `verify-existing` to inspect citation commands already present in the TeX source and write a plain text report showing whether the cited BibTeX entries look supported, weak, unsupported, or missing.
 
@@ -203,14 +243,28 @@ The report is intentionally easy to share and review in any editor. It includes:
 - a short reason
 - evidence snippets when available
 
+### 8. Optional public database lookup
+
+If you want additional citation suggestions beyond your local `.bib` files and PDFs, enable public lookup:
+
+```bash
+citation-agent --enable-public-lookup review \
+  --project /path/to/latex-project \
+  --pdfs /path/to/pdfs \
+  --bib /path/to/refs.bib \
+  --out citation-review-report.txt
+```
+
+The current implementation uses Crossref as an optional suggestion source. These public suggestions are reported as readable recommendations only. They are not treated as verified evidence automatically.
+
 ## Recommended Workflow
 
 The safest way to use Citation Agent is:
 
 1. Run `scan`
-2. Run `audit`
-3. Run `verify-existing` if you want to audit citations already in the document
-4. Run `apply --dry-run` to preview repairs to the content
+2. Run `review` to get a readable text report across the project
+3. Run `verify-existing` if you want the dedicated existing-citation-only report
+4. Run `apply --dry-run --report-out ...` to preview repairs to the content
 5. Review which wrong citations would be removed and which missing citations would be added
 6. Run `apply --write` only after checking the diff
 

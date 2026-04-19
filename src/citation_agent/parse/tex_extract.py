@@ -15,6 +15,10 @@ CAPTURE_CITE_PATTERN = re.compile(r"\\(?P<command>(?:cite|citep|citet|parencite|
 CONTROL_COMMAND_PATTERN = re.compile(
     r"\\(?:documentclass|usepackage|bibliography|bibliographystyle|addbibresource|begin|end)\b(?:\[[^\]]*\])?(?:\{[^}]*\})?"
 )
+NON_PROSE_COMMAND_PATTERN = re.compile(
+    r"\\(?:chapter|section|subsection|subsubsection|paragraph|subparagraph|label|ref|eqref|pageref|include|input|subfile|includegraphics|caption|item|texttt|path|print[a-zA-Z]*|nomentry[a-zA-Z]*|appendix[a-zA-Z]*|tableofcontents|listoffigures|listoftables)\b"
+)
+NON_PROSE_TOKEN_PATTERN = re.compile(r"(results/|scripts/|repository root|\.png\b|\.jpg\b|\.pdf\b|\.bib\b)", re.IGNORECASE)
 
 
 def strip_comments(text: str) -> str:
@@ -34,6 +38,15 @@ def mask_preamble_and_commands(text: str) -> str:
 
 def detect_existing_citation_nearby(sentence: str) -> bool:
     return bool(CITE_PATTERN.search(sentence))
+
+
+def looks_like_prose_sentence(sentence: str) -> bool:
+    without_cites = CAPTURE_CITE_PATTERN.sub("", sentence)
+    if NON_PROSE_COMMAND_PATTERN.search(without_cites):
+        return False
+    if NON_PROSE_TOKEN_PATTERN.search(without_cites):
+        return False
+    return True
 
 
 def _document_body(text: str) -> str:
@@ -91,7 +104,13 @@ def extract_claims(tex_file: Path, project_root: Path) -> list[ClaimCandidate]:
             if sentence_offset == -1:
                 sentence_offset = paragraph_offset
             section = _section_for_offset(sections, sentence_offset)
-            classification, needs_citation, multi_source_hint, vague = classify_claim(sentence, section)
+            if not looks_like_prose_sentence(sentence):
+                classification = "non_prose"
+                needs_citation = False
+                multi_source_hint = False
+                vague = False
+            else:
+                classification, needs_citation, multi_source_hint, vague = classify_claim(sentence, section)
             has_citation = detect_existing_citation_nearby(sentence)
             claims.append(
                 ClaimCandidate(
@@ -141,6 +160,8 @@ def extract_existing_citation_checks(tex_file: Path) -> list[ExistingCitationChe
         for sentence_index, sentence in enumerate(sentences):
             matches = list(CAPTURE_CITE_PATTERN.finditer(sentence))
             if not matches:
+                continue
+            if not looks_like_prose_sentence(sentence):
                 continue
             sentence_offset = body.find(sentence, paragraph_offset)
             if sentence_offset == -1:

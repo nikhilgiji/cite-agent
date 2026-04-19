@@ -5,7 +5,12 @@ import unittest
 from citation_agent.config import CitationAgentConfig
 from citation_agent.parse.tex_extract import extract_claims
 from citation_agent.pipeline import run_pipeline
-from citation_agent.report.text_report import render_review_text_report
+from citation_agent.report.text_report import (
+    render_invalid_citations_report,
+    render_manual_review_report,
+    render_missing_citations_report,
+    render_review_text_report,
+)
 
 
 class TestReportingAndSafety(unittest.TestCase):
@@ -60,3 +65,37 @@ ImageNet was introduced in 2009 and is a widely used benchmark.
             self.assertIn("Line:", report)
             self.assertIn("Paragraph:", report)
             self.assertIn(str((tmp_path / "main.tex").resolve()), report)
+
+    def test_focused_reports_render_expected_sections(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            (tmp_path / "refs.bib").write_text(
+                """
+@article{imagenet2009,
+  title = {ImageNet: A large-scale hierarchical image database},
+  author = {Deng, Jia and others},
+  year = {2009}
+}
+""".strip(),
+                encoding="utf-8",
+            )
+            (tmp_path / "main.tex").write_text(
+                r"""
+\documentclass{article}
+\begin{document}
+ImageNet was introduced in 2009 and is a widely used benchmark \cite{missingkey}.
+Transformers are universally optimal for every task.
+\bibliography{refs}
+\end{document}
+""".strip(),
+                encoding="utf-8",
+            )
+
+            artifacts = run_pipeline(tmp_path, None, [str((tmp_path / "refs.bib").resolve())], CitationAgentConfig())
+            invalid_report = render_invalid_citations_report(artifacts)
+            missing_report = render_missing_citations_report(artifacts)
+            manual_report = render_manual_review_report(artifacts)
+
+            self.assertIn("Invalid or Incorrect Citations Report", invalid_report)
+            self.assertIn("Missing Citations Report", missing_report)
+            self.assertIn("Manual Review Citations Report", manual_report)

@@ -169,6 +169,42 @@ The text report includes:
 - confidence
 - short explanation
 
+#### Separate focused text reports
+
+You can also generate separate built-in plain text reports directly.
+
+Invalid or incorrect citations only:
+
+```bash
+citation-agent report-invalid \
+  --project /path/to/latex-project \
+  --pdfs /path/to/pdfs \
+  --bib /path/to/refs.bib \
+  --out invalid-or-incorrect-citations.txt
+```
+
+Missing citations that can be added automatically:
+
+```bash
+citation-agent report-missing \
+  --project /path/to/latex-project \
+  --pdfs /path/to/pdfs \
+  --bib /path/to/refs.bib \
+  --out missing-citations.txt
+```
+
+Claims still needing manual review:
+
+```bash
+citation-agent report-manual-review \
+  --project /path/to/latex-project \
+  --pdfs /path/to/pdfs \
+  --bib /path/to/refs.bib \
+  --out manual-review-citations.txt
+```
+
+These focused reports remain plain text and preserve the file, line, paragraph, sentence, and reason fields.
+
 ### 4. Preview edits with dry-run
 
 Use `apply --dry-run` to see the proposed diffs without modifying files.

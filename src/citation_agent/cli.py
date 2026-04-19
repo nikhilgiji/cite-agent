@@ -12,7 +12,13 @@ from citation_agent.edit.diff_writer import unified_diff
 from citation_agent.edit.tex_rewriter import apply_citation_decisions
 from citation_agent.pipeline import run_pipeline, summarize_scan
 from citation_agent.report.audit_json import write_audit_json
-from citation_agent.report.text_report import write_existing_citation_text_report, write_review_text_report
+from citation_agent.report.text_report import (
+    write_existing_citation_text_report,
+    write_invalid_citations_report,
+    write_manual_review_report,
+    write_missing_citations_report,
+    write_review_text_report,
+)
 
 
 LOGGER = logging.getLogger("citation_agent")
@@ -29,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--enable-public-lookup", action="store_true", help="Query Crossref for additional citation suggestions")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    for name in ("scan", "audit", "apply", "verify-existing", "review"):
+    for name in ("scan", "audit", "apply", "verify-existing", "review", "report-invalid", "report-missing", "report-manual-review"):
         subparser = subparsers.add_parser(name)
         subparser.add_argument("--project", required=True)
         subparser.add_argument("--pdfs", default=None)
@@ -40,6 +46,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     review_parser = subparsers.choices["review"]
     review_parser.add_argument("--out", required=True, help="Path to a readable text review report")
+
+    for name in ("report-invalid", "report-missing", "report-manual-review"):
+        subparsers.choices[name].add_argument("--out", required=True, help="Path to a focused readable text report")
 
     apply_parser = subparsers.choices["apply"]
     mode_group = apply_parser.add_mutually_exclusive_group(required=True)
@@ -78,6 +87,27 @@ def _run_review(args: argparse.Namespace, config: CitationAgentConfig) -> int:
     artifacts = run_pipeline(args.project, args.pdfs, _parse_bib_args(args.bib), config)
     write_review_text_report(args.out, artifacts, mode="review")
     print(f"Wrote review report to {args.out}")
+    return 0
+
+
+def _run_report_invalid(args: argparse.Namespace, config: CitationAgentConfig) -> int:
+    artifacts = run_pipeline(args.project, args.pdfs, _parse_bib_args(args.bib), config)
+    write_invalid_citations_report(args.out, artifacts)
+    print(f"Wrote invalid or incorrect citations report to {args.out}")
+    return 0
+
+
+def _run_report_missing(args: argparse.Namespace, config: CitationAgentConfig) -> int:
+    artifacts = run_pipeline(args.project, args.pdfs, _parse_bib_args(args.bib), config)
+    write_missing_citations_report(args.out, artifacts)
+    print(f"Wrote missing citations report to {args.out}")
+    return 0
+
+
+def _run_report_manual_review(args: argparse.Namespace, config: CitationAgentConfig) -> int:
+    artifacts = run_pipeline(args.project, args.pdfs, _parse_bib_args(args.bib), config)
+    write_manual_review_report(args.out, artifacts)
+    print(f"Wrote manual review citations report to {args.out}")
     return 0
 
 
@@ -151,6 +181,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_audit(args, config)
     if args.command == "review":
         return _run_review(args, config)
+    if args.command == "report-invalid":
+        return _run_report_invalid(args, config)
+    if args.command == "report-missing":
+        return _run_report_missing(args, config)
+    if args.command == "report-manual-review":
+        return _run_report_manual_review(args, config)
     if args.command == "apply":
         return _run_apply(args, config)
     if args.command == "repair-bib":

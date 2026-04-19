@@ -184,3 +184,93 @@ def render_review_text_report(artifacts: PipelineArtifacts, mode: str = "review"
 
 def write_review_text_report(path: str | Path, artifacts: PipelineArtifacts, mode: str = "review") -> None:
     Path(path).write_text(render_review_text_report(artifacts, mode=mode), encoding="utf-8")
+
+
+def render_invalid_citations_report(artifacts: PipelineArtifacts) -> str:
+    invalid = [item for item in artifacts.existing_citation_results if item.status in {"unsupported", "missing_key"}]
+    lines = ["Invalid or Incorrect Citations Report", ""]
+    if not invalid:
+        lines.append("No invalid or incorrect citations found.")
+        return "\n".join(lines) + "\n"
+    for item in invalid:
+        lines.extend(
+            [
+                f"- File: {item.file_path}",
+                f"  Line: {item.line_number}, Paragraph: {item.paragraph_index + 1}",
+                f"  Citation: \\{item.citation_command}{{{', '.join(item.cited_keys)}}}",
+                f"  Status: {item.status}",
+                f"  Confidence: {item.confidence:.2f}",
+                f"  Sentence: {item.sentence_text}",
+                f"  Reason: {item.reason}",
+            ]
+        )
+        if item.missing_keys:
+            lines.append(f"  Missing keys: {', '.join(item.missing_keys)}")
+        if item.evidence_spans:
+            lines.append(f"  Evidence: {' | '.join(item.evidence_spans[:2])}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_missing_citations_report(artifacts: PipelineArtifacts) -> str:
+    inserted = [decision for decision in artifacts.decisions if decision.action == "inserted"]
+    claim_by_id = {claim.claim_id: claim for claim in artifacts.claims}
+    lines = ["Missing Citations Report", ""]
+    if not inserted:
+        lines.append("No automatically addable missing citations found.")
+        return "\n".join(lines) + "\n"
+    for decision in inserted:
+        claim = claim_by_id.get(decision.claim_id)
+        if not claim:
+            continue
+        lines.extend(
+            [
+                f"- File: {claim.location.file_path}",
+                f"  Line: {claim.location.line_number}, Paragraph: {claim.location.paragraph_index + 1}",
+                f"  Sentence: {claim.text}",
+                f"  Add citation: \\{decision.citation_command or 'cite'}{{{', '.join(decision.bib_keys)}}}",
+                f"  Confidence: {decision.confidence:.2f}",
+                f"  Reason: {decision.reason}",
+            ]
+        )
+        if decision.evidence_spans:
+            lines.append(f"  Evidence: {' | '.join(decision.evidence_spans[:2])}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_manual_review_report(artifacts: PipelineArtifacts) -> str:
+    review_needed = [decision for decision in artifacts.decisions if decision.action == "needs_review"]
+    claim_by_id = {claim.claim_id: claim for claim in artifacts.claims}
+    lines = ["Manual Review Citations Report", ""]
+    if not review_needed:
+        lines.append("No manual-review citation items found.")
+        return "\n".join(lines) + "\n"
+    for decision in review_needed:
+        claim = claim_by_id.get(decision.claim_id)
+        if not claim:
+            continue
+        lines.extend(
+            [
+                f"- File: {claim.location.file_path}",
+                f"  Line: {claim.location.line_number}, Paragraph: {claim.location.paragraph_index + 1}",
+                f"  Sentence: {claim.text}",
+                f"  Reason: {decision.reason}",
+            ]
+        )
+        if decision.evidence_spans:
+            lines.append(f"  Evidence: {' | '.join(decision.evidence_spans[:2])}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def write_invalid_citations_report(path: str | Path, artifacts: PipelineArtifacts) -> None:
+    Path(path).write_text(render_invalid_citations_report(artifacts), encoding="utf-8")
+
+
+def write_missing_citations_report(path: str | Path, artifacts: PipelineArtifacts) -> None:
+    Path(path).write_text(render_missing_citations_report(artifacts), encoding="utf-8")
+
+
+def write_manual_review_report(path: str | Path, artifacts: PipelineArtifacts) -> None:
+    Path(path).write_text(render_manual_review_report(artifacts), encoding="utf-8")

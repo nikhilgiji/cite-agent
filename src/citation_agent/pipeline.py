@@ -126,9 +126,12 @@ def summarize_scan(artifacts: PipelineArtifacts) -> dict[str, int | bool]:
     decision_counts: dict[str, int] = defaultdict(int)
     for decision in artifacts.decisions:
         decision_counts[decision.action] += 1
+    effective_bib_files = {entry.source_path for entry in artifacts.bib_entries}
+    if not effective_bib_files:
+        effective_bib_files = set(artifacts.analysis.bibliography_files)
     return {
         "tex_files": len(artifacts.analysis.tex_files),
-        "bib_files": len(artifacts.analysis.bibliography_files),
+        "bib_files": len(effective_bib_files),
         "pdfs": len(artifacts.pdf_documents),
         "claims": len(artifacts.claims),
         "inserted": decision_counts.get("inserted", 0),
